@@ -1,0 +1,183 @@
+<!DOCTYPE html> 
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Property Map Visualization</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    body { margin: 0; padding: 0; display: flex; }
+    .sidebar {
+      width: 25%; height: 100vh; padding: 20px;
+      box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+      box-sizing: border-box;
+    }
+    #map { height: 100vh; width: 75%; }
+    input, button { margin-bottom: 10px; width: 100%; padding: 10px; box-sizing: border-box; }
+    
+    /* 默认隐藏 Logo */
+    #logo {
+      position: absolute;
+      display: none;
+      top: 0px;
+      right: 0px;
+      width: 300px;
+      z-index: 1000;
+    }
+
+
+    
+    /* 导出时地图覆盖整个页面 */
+    .map-fullscreen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    /* 导出后显示 Logo */
+    .map-fullscreen #logo {
+      display: block;
+      top: 10px;
+      right: 10px;
+      position: absolute;
+      width: 100px;
+      height: auto;
+    }
+
+    /* 导出时隐藏 Delete 按钮 */
+    .map-fullscreen .delete-btn {
+      display: none;
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- 左侧的属性信息输入栏 -->
+  <div class="sidebar" id="sidebar">
+    <h2>Property Information</h2>
+    <label for="address">Address:</label>
+    <input type="text" id="address" placeholder="Enter address" />
+    
+    <label for="beds">Beds:</label>
+    <input type="number" id="beds" placeholder="Number of beds" />
+    
+    <label for="baths">Baths:</label>
+    <input type="number" id="baths" placeholder="Number of baths" />
+    
+    <label for="reception">Reception:</label>
+    <input type="number" id="reception" placeholder="Number of receptions" />
+    
+    <label for="hmo">HMO:</label>
+    <input type="checkbox" id="hmo" />
+    
+    <label for="rent">Rent:</label>
+    <input type="text" id="rent" placeholder="Rent amount" />
+    
+    <button id="addProperty">Add Property</button>
+    <button id="exportMap">Export Map</button>
+  </div>
+  
+  <!-- Logo 图片 -->
+  <img id="logo" src="logo.png" alt="Logo" />
+
+  <!-- 地图 -->
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+
+  <script>
+    // 初始化地图
+    const map = L.map('map').setView([51.64, -0.3], 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    // 全局声明 markers 数组，存储所有的标记
+    let markers = [];
+
+    // 添加房产标记
+    document.getElementById('addProperty').addEventListener('click', () => {
+      const address = document.getElementById('address').value;
+      const beds = document.getElementById('beds').value;
+      const baths = document.getElementById('baths').value;
+      const reception = document.getElementById('reception').value;
+      const hmo = document.getElementById('hmo').checked ? 'Yes' : 'No';
+      const rent = document.getElementById('rent').value;
+
+      // 这里你可以使用 geocoding API 查找地址坐标，暂时使用静态坐标
+      const latlng = [51.64, -0.3];  // 示例静态坐标
+      const marker = L.marker(latlng, { draggable: true }).addTo(map);
+
+      marker.dragging.enable();  // 确保标记最初是可以拖动的
+
+
+      // 将标记对象存储在数组中
+      markers.push(marker);
+
+      
+      marker.bindPopup(`
+        <b>${address}</b><br/>
+        Beds: ${beds}<br/>
+        Baths: ${baths}<br/>
+        Reception: ${reception}<br/>
+        HMO: ${hmo}<br/>
+        Rent: £${rent}<br/>
+        <button class="delete-btn" onclick="deleteMarker(this)">Delete</button>
+      `);
+    
+
+    // 将当前标记对象存储在按钮元素上
+    marker.on('popupopen', () => {
+      const deleteBtn = document.querySelector('.delete-btn');
+      if (deleteBtn) {
+        deleteBtn.marker = marker;  // 将 `marker` 对象存储到按钮上
+      }
+    });
+ });
+
+    // 删除标记的功能
+    function deleteMarker(button) {
+    const marker = button.marker; // 获取对应的标记对象
+     if (marker) {
+       map.removeLayer(marker);    // 直接删除该标记
+
+       // 从 markers 数组中移除该标记
+       markers = markers.filter(m => m !== marker);
+      }
+    }
+
+    // 导出地图功能，隐藏侧边栏并显示 Logo
+    document.getElementById('exportMap').addEventListener('click', () => {
+      document.getElementById('sidebar').style.display = 'none'; // 隐藏侧边栏
+      document.getElementById('logo').style.display = 'block'; // 显示 Logo
+      document.getElementById('map').style.width = '100vw'; // 调整地图宽度为全屏
+      map.getContainer().classList.add('map-fullscreen'); // 应用全屏样式
+      map.invalidateSize();  // 重新计算地图大小
+    
+
+    // 1. 移除所有标记
+    markers.forEach(marker => {
+        map.removeLayer(marker);  // 从地图中移除当前所有标记
+      });
+
+    // 2. 重新创建所有标记，不再允许拖动
+    markers = markers.map(marker => {
+        const latlng = marker.getLatLng();  // 获取现有标记的坐标
+        const newMarker = L.marker(latlng, { draggable: false }).addTo(map);  // 创建新的不可拖动的标记
+        newMarker.bindPopup(marker.getPopup().getContent());  // 复制弹出框内容
+        return newMarker;  // 返回新的标记并替换原有标记
+      });
+
+
+});
+
+
+  </script>
+
+</body>
+</html>
